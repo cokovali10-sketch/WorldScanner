@@ -14,11 +14,11 @@ object ReportRenderer {
         if (results.isEmpty()) return emptyList()
 
         val rawRows = results.mapIndexed { index, result -> rowOf(index + 1, result) }
-        val widths = IntArray(8)
+        val widths = IntArray(9)
         for (row in rawRows) {
             for (i in row.indices) widths[i] = maxOf(widths[i], row[i].length)
         }
-        val header = listOf("$", "item", "count", "dimension", "region", "pos", "in", "holder")
+        val header = listOf("$", "item", "count", "dimension", "region", "chunk", "pos", "in", "holder")
         return buildList {
             add(ansiBold(formatRow(header, widths)))
             add(ansiDim(formatRow(header.map { "-".repeat(it.length) }, widths)))
@@ -42,6 +42,7 @@ object ReportRenderer {
             result.item.count.toString(),
             result.dimension.name.lowercase(),
             "${result.regionX},${result.regionZ}",
+            "${result.chunkX},${result.chunkZ}",
             position,
             if (result.containerPath.isEmpty()) "-" else result.containerPath.joinToString(">") { it.removePrefix("minecraft:") },
             holder.removePrefix("minecraft:"),
@@ -58,8 +59,9 @@ object ReportRenderer {
         3 -> colorDimension(text)
         4 -> ansiDim(text)
         5 -> ansiDim(text)
-        6 -> if (text == "-") text else ansiYellow(text)
-        7 -> ansiGreen(text)
+        6 -> ansiDim(text)
+        7 -> if (text == "-") text else ansiYellow(text)
+        8 -> ansiGreen(text)
         else -> text
     }
 

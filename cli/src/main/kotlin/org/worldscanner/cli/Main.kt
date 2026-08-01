@@ -1,6 +1,8 @@
 package org.worldscanner.cli
 
 import org.worldscanner.core.SearchEngine
+import org.worldscanner.core.filter.ComponentItemMatcher
+import org.worldscanner.core.filter.ItemFilterParser
 import org.worldscanner.core.model.DimensionType
 import org.worldscanner.core.scan.ScanQuery
 import java.nio.file.Files
@@ -106,15 +108,30 @@ private fun runStats(parsed: CliArgs, progress: Boolean) {
 private fun runFind(parsed: CliArgs, progress: Boolean) {
     val world = requireWorld(parsed)
 
+    val matcher = parsed.filter?.let { raw ->
+        val result = ItemFilterParser.parse(raw)
+        if (result.isFailure) {
+            System.err.println(ansiRed("Error: invalid --filter: ${result.exceptionOrNull()?.message}"))
+            exitProcess(1)
+        }
+        ComponentItemMatcher(result.getOrThrow())
+    }
+
     val query = ScanQuery(
         itemTargets = parsed.itemTargets.toSet(),
+        matcher = matcher,
         dimension = parseDimension(parsed.dimension),
         regionX = parsed.regionX,
         regionZ = parsed.regionZ,
         limit = parsed.limit ?: Int.MAX_VALUE,
     )
 
-    println("Scanning ${parsed.itemTargets.joinToString(", ") { it.removePrefix("minecraft:") }} in $world ...")
+    val scanLabel = if (matcher != null) {
+        "'${parsed.filter}'"
+    } else {
+        parsed.itemTargets.joinToString(", ") { it.removePrefix("minecraft:") }
+    }
+    println("Scanning $scanLabel in $world ...")
 
     val started = System.nanoTime()
     val bar = ProgressBar("Scanning")

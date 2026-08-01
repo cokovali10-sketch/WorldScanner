@@ -56,7 +56,7 @@ class WorldScanner(
     fun scan(worldRoot: Path, query: ScanQuery, onProgress: ScanProgress? = null): ScanReport {
         val stats = ScanStats()
         val regions = discoverAndFilter(worldRoot, query)
-        if (regions.isEmpty() || query.itemTargets.isEmpty()) return ScanReport(emptyList(), stats)
+        if (regions.isEmpty() || query.isEmpty) return ScanReport(emptyList(), stats)
 
         val stop = AtomicBoolean(false)
         val collector = ResultCollector(query.limit, stop)

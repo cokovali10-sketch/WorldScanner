@@ -10,6 +10,8 @@ data class CliArgs(
     val command: Command,
     val worldPath: Path,
     val itemTargets: List<String>,
+    /** Raw `--filter` / `-f` value, e.g. `diamond_sword[enchantments={mending:1}]`. */
+    val filter: String?,
     val dimension: String?,
     val regionX: Int?,
     val regionZ: Int?,
@@ -45,6 +47,7 @@ object CliArgsParser {
         val worldPath = Paths.get(args[1]).toAbsolutePath()
 
         val itemTargets = ArrayList<String>()
+        var filter: String? = null
         var dimension: String? = null
         var regionX: Int? = null
         var regionZ: Int? = null
@@ -70,6 +73,15 @@ object CliArgsParser {
                     }
                 }
                 arg.startsWith("--items=") -> itemTargets += normalizeItems(arg.removePrefix("--items="))
+
+                arg.startsWith("--filter=") -> filter = arg.removePrefix("--filter=")
+                arg == "--filter" || arg == "-f" -> {
+                    if (i + 1 < args.size) {
+                        i += 1
+                        filter = args[i]
+                    }
+                }
+                arg.startsWith("-f=") -> filter = arg.removePrefix("-f=")
 
                 arg.startsWith("--dimension=") -> dimension = arg.removePrefix("--dimension=").lowercase()
 
@@ -110,13 +122,14 @@ object CliArgsParser {
             i += 1
         }
 
-        if (command == CliArgs.Command.FIND && itemTargets.isEmpty()) return null
+        if (command == CliArgs.Command.FIND && itemTargets.isEmpty() && filter == null) return null
         if (jsonPath != null && csvPath != null && jsonPath == csvPath) return null
 
         return CliArgs(
             command = command,
             worldPath = worldPath,
             itemTargets = itemTargets.distinct(),
+            filter = filter,
             dimension = dimension,
             regionX = regionX,
             regionZ = regionZ,
@@ -153,6 +166,9 @@ object CliArgsParser {
             Options:
               --item <id>          Item to find (repeatable), e.g. --item diamond
               --items=a,b,c        Comma-separated list of items to find
+              --filter <expr>      /give-style component filter, e.g.
+                                   "diamond_sword[enchantments={mending:1,sharpness:5},damage=150]"
+                                   (short form: -f)
               --dimension=<dim>    Limit to overworld | nether | end
               --region=<rx,rz>     Limit to a single region file
               --limit=<N>          Stop after N results
@@ -167,6 +183,8 @@ object CliArgsParser {
             Examples:
               worldscanner find C:/worlds/survival --item diamond --summary
               worldscanner find C:/worlds/survival --items=shulker_box,bundle --limit=50
+              worldscanner find C:/worlds/survival --filter "diamond_sword[enchantments={mending:1}]"
+              worldscanner find C:/worlds/survival -f "netherite_sword[damage=50,custom_data={owner:\"koca\"}]"
               worldscanner find C:/worlds/survival --item netherite_sword --json=out.json
               worldscanner stats C:/worlds/survival --dimension=nether
             """.trimIndent(),

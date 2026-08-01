@@ -33,7 +33,7 @@ class ChunkScanner(val query: ScanQuery) {
         chunkZ: Int,
         sink: ResultSink,
     ): Boolean {
-        if (query.itemTargets.isEmpty()) return true
+        if (query.isEmpty) return true
 
         for (blockEntity in ChunkStructure.blockEntities(root)) {
             val id = blockEntity.string("id") ?: continue
@@ -129,6 +129,9 @@ class ChunkScanner(val query: ScanQuery) {
         return sink.offer(SearchResult(stack, dimension, regionX, regionZ, chunkX, chunkZ, found))
     }
 
-    private fun matchesTarget(stack: ItemStack): Boolean =
-        stack.normalizedId in query.itemTargets
+    private fun matchesTarget(stack: ItemStack): Boolean {
+        val matcher = query.matcher
+        if (matcher != null) return matcher.matches(stack)
+        return stack.normalizedId in query.itemTargets
+    }
 }

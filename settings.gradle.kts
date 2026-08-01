@@ -7,10 +7,11 @@ pluginManagement {
 
 dependencyResolutionManagement {
     repositories {
+        google()
         mavenCentral()
     }
 }
 
 rootProject.name = "worldscanner"
 
-include(":core", ":cli")
+include(":core", ":cli", ":ui")

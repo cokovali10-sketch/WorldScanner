@@ -1,5 +1,6 @@
 package org.worldscanner.core.scan
 
+import org.worldscanner.core.filter.ItemMatcher
 import org.worldscanner.core.model.DimensionType
 import org.worldscanner.core.nbt.normalizeResourceLocation
 
@@ -8,6 +9,12 @@ import org.worldscanner.core.nbt.normalizeResourceLocation
  */
 class ScanQuery(
     itemTargets: Set<String> = emptySet(),
+    /**
+     * Optional component matcher (see [ItemMatcher]). When set it drives the
+     * search instead of (or in addition to) [itemTargets]; it can match on
+     * enchantments, damage, custom names, custom data and arbitrary components.
+     */
+    val matcher: ItemMatcher? = null,
     val dimension: DimensionType? = null,
     val regionX: Int? = null,
     val regionZ: Int? = null,
@@ -20,4 +27,7 @@ class ScanQuery(
 ) {
     /** Targets normalized (without the `minecraft:` prefix). */
     val itemTargets: Set<String> = itemTargets.map { it.normalizeResourceLocation() }.toSet()
+
+    /** True when nothing to look for; scan can short-circuit immediately. */
+    val isEmpty: Boolean get() = itemTargets.isEmpty() && matcher == null
 }

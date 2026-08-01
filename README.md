@@ -5,13 +5,14 @@ region files (`.mca`) to find items, containers and entity inventories. It uses
 **real NBT parsing** — no brittle byte-string searching — so results are
 accurate and reliable across game versions.
 
-The project is a clean Kotlin rewrite of the original Java tool, split into two
+The project is a clean Kotlin rewrite of the original Java tool, split into three
 modules:
 
 | Module  | Purpose                                                     |
 | ------- | ----------------------------------------------------------- |
 | `core`  | Library: NBT parser, Anvil region reader, analysis, search  |
 | `cli`   | Console interface for running everything from the terminal  |
+| `ui`    | Compose for Desktop GUI (MVVM): folder picker, SNBT filter, live results table |
 
 ## Features
 
@@ -26,6 +27,9 @@ modules:
 - Progress bar and **ANSI colors** in the terminal
 - JSON and CSV export
 - `--version` prints the tool version
+- **Desktop GUI** (`ui` module): browse for a world folder, type an SNBT filter
+  with live validation, scan with a progress bar and copy coordinates from the
+  results table
 
 ## Requirements
 
@@ -61,18 +65,49 @@ worldscanner help                             Show usage
 
 ### `find` options
 
-| Option               | Description                                        |
-| -------------------- | -------------------------------------------------- |
-| `--item <id>`        | Item to find, repeatable (e.g. `--item diamond`)   |
-| `--items=a,b,c`      | Comma-separated list of items                      |
-| `--dimension=<dim>`  | Limit to `overworld`, `nether` or `end`            |
-| `--region=<rx,rz>`   | Limit to a single region file                      |
-| `--limit=<N>`        | Stop after N results                               |
-| `--threads=<N>`      | Worker threads (default: CPU count)                |
-| `--json=<file>`      | Export results to JSON                             |
-| `--csv=<file>`       | Export results to CSV                              |
-| `--summary`          | Compact output instead of a full table             |
-| `--color`/`--no-color` | Force ANSI colors on/off                         |
+| Option                 | Description                                        |
+| ---------------------- | -------------------------------------------------- |
+| `--item <id>`          | Item to find, repeatable (e.g. `--item diamond`)   |
+| `--items=a,b,c`        | Comma-separated list of items                      |
+| `--filter <expr>`      | `/give`-style component filter (alias `-f`)        |
+| `--dimension=<dim>`    | Limit to `overworld`, `nether` or `end`            |
+| `--region=<rx,rz>`     | Limit to a single region file                      |
+| `--limit=<N>`          | Stop after N results                               |
+| `--threads=<N>`        | Worker threads (default: CPU count)                |
+| `--json=<file>`        | Export results to JSON                             |
+| `--csv=<file>`         | Export results to CSV                              |
+| `--summary`            | Compact output instead of a full table             |
+| `--color`/`--no-color` | Force ANSI colors on/off                           |
+
+### `--filter` / item component matching
+
+`--filter` accepts Minecraft 1.20.5+ **item component** syntax (same style as the
+`/give` command) to search by more than just the item id. The filter is parsed
+with a full SNBT-style component parser and matches both the modern `components`
+branch and the legacy pre-1.20.5 `tag` branch, so it works across versions:
+
+```text
+diamond_sword[enchantments={mending:1,sharpness:5},damage=150]
+netherite_sword[custom_name="King's Blade"]
+diamond[custom_data={owner:"koca"}]
+[enchantments={silk_touch:1}]          # any item with Silk Touch
+```
+
+Supported components: `enchantments` (minimum level per enchantment), `damage`
+(exact durability damage), `custom_name` (exact display name) and `custom_data`
+(partial match, nested compounds recurse). Any other component key falls back to
+a structural match. Combine it with `--item`, `--dimension`, `--region` or
+`--limit` as usual. Results always include world coordinates, the region and
+chunk, plus the holder type (block entity or entity).
+
+```text
+worldscanner find C:/worlds/survival --filter "diamond_sword[enchantments={mending:1}]"
+worldscanner find C:/worlds/survival -f "netherite_sword[damage=50,custom_data={owner:\"koca\"}]"
+```
+
+> On Windows, quote embedded quotes so the shell preserves them, e.g.
+> `-f "netherite_sword[custom_data={owner:\"koca\"}]"`, or write the filter to a
+> file and pass it via `--filter=<value>` from a script.
 
 ## Minecraft version compatibility
 
@@ -86,6 +121,19 @@ structurally and never checks `DataVersion` to decide what to read. Supported:
 
 Run `worldscanner stats <world>` to see the world's chunk `DataVersion` range and
 confirm compatibility before a full scan.
+
+## Desktop GUI
+
+The `ui` module provides a Compose for Desktop application on top of the same
+`core` engine. It runs scans asynchronously (progress shown per chunk), validates
+the SNBT filter as you type, and renders results in a table with dimension,
+region, coordinates, chunk, container and item columns. Coordinates can be copied
+straight to the clipboard.
+
+```bat
+gradlew.bat :ui:run                              # run the GUI
+gradlew.bat :ui:createDistributable              # build an installer / app bundle
+```
 
 ## Building from source
 
@@ -117,6 +165,12 @@ cli/src/main/kotlin/org/worldscanner/cli/
 ├── CliArgs.kt        argument parsing
 ├── Ansi.kt           ANSI colors, ProgressBar.kt
 └── ReportRenderer.kt, JsonExporter.kt, CsvExporter.kt
+
+ui/src/main/kotlin/org/worldscanner/ui/
+├── Main.kt           Compose application entry point
+├── App.kt            screen layout: path picker, filter, controls, results table
+├── ScanViewModel.kt  MVVM view-model (StateFlow<UiState>), async scans on Dispatchers.IO
+└── theme/Theme.kt    dark Minecraft-inspired Material 3 theme
 ```
 
 Data flow: `RegionFile` → chunk decompression → `NbtReader` → `ChunkScanner` →
