@@ -1,31 +1,27 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
-    id("java")
-    application
+    kotlin("jvm") version "2.2.20" apply false
 }
 
 group = "org.worldscanner"
-version = "1.0"
+version = "2.0.0"
 
-java {
-    toolchain {
-        languageVersion.set(JavaLanguageVersion.of(21))
+allprojects {
+    group = rootProject.group
+    version = rootProject.version
+}
+
+subprojects {
+    plugins.withId("org.jetbrains.kotlin.jvm") {
+        extensions.configure<org.jetbrains.kotlin.gradle.dsl.KotlinJvmProjectExtension> {
+            compilerOptions {
+                jvmTarget.set(JvmTarget.JVM_21)
+            }
+        }
     }
-}
 
-repositories {
-    mavenCentral()
-}
-
-dependencies {
-    testImplementation(platform("org.junit:junit-bom:5.10.2"))
-    testImplementation("org.junit.jupiter:junit-jupiter")
-    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-}
-
-application {
-    mainClass.set("org.worldscanner.Main")
-}
-
-tasks.test {
-    useJUnitPlatform()
+    tasks.withType<JavaCompile>().configureEach {
+        options.release.set(21)
+    }
 }

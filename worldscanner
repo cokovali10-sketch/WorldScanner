@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")"
+
+DIST="cli/build/install/worldscanner/bin/worldscanner"
+
+if [ ! -x "$DIST" ]; then
+    if [ ! -f "gradlew" ]; then
+        echo "[WorldScanner] No prebuilt distribution and no Gradle wrapper found." >&2
+        echo "[WorldScanner] Build one first:  ./gradlew :cli:installDist" >&2
+        exit 1
+    fi
+    echo "[WorldScanner] First run detected - building a standalone launcher ..."
+    ./gradlew :cli:installDist --console=plain
+fi
+
+exec "$DIST" "$@"
