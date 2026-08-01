@@ -154,7 +154,7 @@ object CliArgsParser {
     fun printUsage() {
         System.out.println(
             """
-            WorldScanner 2.0 - Minecraft Anvil world item scanner
+            WorldScanner 3.0 - Minecraft Anvil world item scanner
 
             Usage:
               worldscanner info  <world-path>            Inspect a world

@@ -158,6 +158,18 @@ class ChunkScannerTest {
     }
 
     @Test
+    fun `result carries full container inventory for the inspector`() {
+        val chunk = NbtReader.read(NbtWriter.write(modernChunk()))
+        val results = scan(chunk, setOf("diamond"))
+        assertEquals(1, results.size)
+
+        val contents = results[0].containerContents
+        val ids = contents.map { it.normalizedId }.toSet()
+        assertEquals(setOf("diamond", "shulker_box", "netherite_ingot"), ids)
+        assertEquals(6, contents.sumOf { it.count })
+    }
+
+    @Test
     fun `recurses into shulker box via legacy tag BlockEntityTag`() {
         val chunk = NbtReader.read(NbtWriter.write(legacyChunk()))
         val results = scan(chunk, setOf("gold_ingot"))

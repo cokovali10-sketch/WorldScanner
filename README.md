@@ -21,11 +21,14 @@ modules:
 - **Recursive search inside nested containers** — e.g. a shulker box inside a chest
 - Supports the **modern item format 1.20.5+** (`components`, `container.Items`) and the **legacy format** (`tag`, `BlockEntityTag`)
 - Multi-threaded region scanning with shared positional reads and thread-local decompression buffers
+- **Coroutine / Flow engine** — `SearchEngine.findFlow(...)` streams matches live; `scan` / `analyze` are `suspend`, workers run on `Dispatchers.Default`
+- **Live progress metrics** — chunks/files per second and ETA (5 s sliding window)
 - Decompression of **gzip**, **zlib**, **LZ4** and raw chunks
 - Filters by dimension and region, result limits, `--threads` parallelism
 - **Item component filters** (`/give`-style SNBT): search by enchantments, damage, custom names, custom data and more
+- **Container inspection** — every result carries the full decoded inventory of its container (including nested shulker boxes / bundles)
 - JSON and CSV export, `--version` flag
-- **Desktop GUI** with folder picker, live filter validation, progress bar and a results table
+- **Desktop GUI** with folder picker, live filter validation, progress/speed readout, a container inspector dialog and `/tp` command copy
 
 ## Requirements
 
@@ -52,9 +55,13 @@ in the other.
 ## Desktop GUI
 
 The `ui` module is a Compose for Desktop app on top of the `core` engine. It
-runs scans asynchronously (per-chunk progress), validates the SNBT filter as you
-type, and shows results in a table from which coordinates can be copied straight
-to the clipboard.
+runs scans asynchronously and **streams results in live** while scanning,
+validates the SNBT filter as you type, and shows results in a table. Clicking a
+row opens a **container inspector** that lists every item in the holder
+(including nested shulker boxes), and a **copy button** puts a dimension-aware
+`/tp` command on the clipboard. The progress bar shows chunks/s and regions/s
+plus a live ETA. Finished scans can be **exported to CSV or JSON** from the
+`Export results` panel.
 
 ### Launching
 
@@ -84,9 +91,9 @@ to the clipboard.
 
 3. **Start scan** — click **Start scan**. The button is only enabled when the
    path exists *and* the filter is valid. A progress bar shows the chunk
-   progress; **Cancel** stops it.
+   progress, speed (chunks/s, regions/s) and ETA; **Cancel** stops it.
 
-4. **Results** — matches appear in the table:
+4. **Results** — matches stream in as they are found:
 
    | Column | Meaning |
    | ------ | ------- |
@@ -97,8 +104,15 @@ to the clipboard.
    | Container | Where the item sits (e.g. `chest → shulker_box`) |
    | Item | Item id |
 
-   Click the **copy icon** on a row to put its coordinates on the clipboard —
-   paste them into Minecraft (e.g. `/tp <x> <y> <z>`) to teleport to the item.
+   Click a **row** to open the **container inspector** dialog: it shows every
+   item in the holder (aggregated, with counts) including nested container
+   contents. Click the **copy icon** on a row to put a dimension-aware
+   `/tp` command on the clipboard — paste it into Minecraft (e.g.
+   `/execute in minecraft:overworld run /tp @s 10 64 20`) to teleport to the item.
+
+5. **Export** — once a scan finishes, the **Export results** panel appears with
+   **CSV** and **JSON** buttons. JSON preserves the full item structure
+   (components / NBT) and each container's contents; CSV is a flat table.
 
 ### Distribution / installer
 
@@ -223,27 +237,34 @@ cli\build\install\worldscanner\bin\worldscanner.bat find C:/path/to/world --item
 core/src/main/kotlin/org/worldscanner/core/
 ├── nbt/              NbtType, NbtTag (sealed), NbtReader, NbtWriter
 ├── anvil/            RegionFile (positional reads), ChunkCompression, RegionDiscovery
-├── model/            ItemStack, BlockPos, SearchResult, ItemSource, DimensionType
+├── model/            ItemStack, BlockPos, SearchResult (+containerContents), ItemSource, DimensionType
 ├── filter/           ItemFilter, ItemFilterParser, ItemMatcher, ComponentItemMatcher
 ├── scan/             ScanQuery, ChunkScanner, ChunkStructure, ItemStackExtractor,
-│                     WorldScanner (visitor + progress), WorldAnalysis (ChunkAnalyzer)
-└── SearchEngine.kt   facade API: find / analyze / describe
+│                     WorldScanner (coroutine/Flow engine), RegionScanner, ProgressTracker,
+│                     ScanProgress (snapshot metrics), WorldAnalysis (ChunkAnalyzer)
+├── export/           JsonExporter, CsvExporter, NbtJson
+└── SearchEngine.kt   facade API: findFlow / find / analyze / describe
 
 cli/src/main/kotlin/org/worldscanner/cli/
 ├── Main.kt           entry point, command routing
 ├── CliArgs.kt        argument parsing
 ├── Ansi.kt           ANSI colors, ProgressBar.kt
-└── ReportRenderer.kt, JsonExporter.kt, CsvExporter.kt
+└── ReportRenderer.kt
 
 ui/src/main/kotlin/org/worldscanner/ui/
 ├── Main.kt           Compose application entry point
-├── App.kt            screen layout: path picker, filter, controls, results table
-├── ScanViewModel.kt  MVVM view-model (StateFlow<UiState>), async scans on Dispatchers.IO
+├── App.kt            screen layout: path picker, filter, controls, results table, inspector
+├── ScanViewModel.kt  MVVM view-model (StateFlow<UiState>), live flow collection, export
+├── ContainerInspectorDialog.kt  modal inventory readout
+├── ExportPanel.kt    CSV / JSON export controls
 └── theme/Theme.kt    dark Minecraft-inspired Material 3 theme
 ```
 
 Data flow: `RegionFile` → chunk decompression → `NbtReader` → `ChunkScanner` →
-recursive container walk → `SearchResult`.
+recursive container walk → `SearchResult` (streamed through a `channelFlow`).
+Region files are split into chunk-range work units processed in parallel by
+`Dispatchers.Default` workers; `ProgressTracker` reports throttled snapshots with
+throughput and ETA.
 
 ## CI
 

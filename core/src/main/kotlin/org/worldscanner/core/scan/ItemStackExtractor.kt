@@ -57,4 +57,28 @@ object ItemStackExtractor {
 
         stack.tag?.list("BundleContents")?.let { for (compound in it.compounds()) ItemStack.from(compound)?.let(consumer) }
     }
+
+    /**
+     * Extracts the full inventory of a block entity / entity: every direct stack
+     * plus all stacks inside nested containers (shulker boxes, bundles), depth
+     * limited by [maxDepth]. Used for the container inspector.
+     */
+    fun extractAll(holder: NbtCompound, maxDepth: Int = MAX_EXTRACT_DEPTH): List<ItemStack> {
+        val out = ArrayList<ItemStack>(32)
+        for (stack in extractDirect(holder)) {
+            out += stack
+            collectNested(stack, 1, maxDepth, out)
+        }
+        return out
+    }
+
+    private fun collectNested(stack: ItemStack, depth: Int, maxDepth: Int, out: MutableList<ItemStack>) {
+        if (depth > maxDepth) return
+        extractNested(stack) { nested ->
+            out += nested
+            collectNested(nested, depth + 1, maxDepth, out)
+        }
+    }
+
+    private const val MAX_EXTRACT_DEPTH = 8
 }

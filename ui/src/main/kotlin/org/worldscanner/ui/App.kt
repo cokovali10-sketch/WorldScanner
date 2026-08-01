@@ -4,7 +4,6 @@ package org.worldscanner.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -106,12 +105,26 @@ fun ScanApp(viewModel: ScanViewModel = remember { ScanViewModel() }) {
                 }
 
                 if (state.isLoading) {
-                    LoadingBar(state.progressLabel)
+                    LoadingBar(state.progressFraction, state.progressLabel)
                 }
 
                 ResultsTable(
                     state = state,
                     onSelectRow = viewModel::selectRow,
+                    onCopyTp = { index -> viewModel.tpCommandFor(index)?.let(::copyToClipboard) },
+                )
+
+                if (state.results.isNotEmpty()) {
+                    ExportPanel(
+                        status = state.exportStatus,
+                        onExportCsv = { path -> viewModel.exportCsv(path) },
+                        onExportJson = { path -> viewModel.exportJson(path) },
+                    )
+                }
+
+                ContainerInspectorDialog(
+                    result = state.selectedIndex?.let { state.results.getOrNull(it) },
+                    onDismiss = viewModel::closeInspector,
                 )
             }
         }
@@ -246,9 +259,9 @@ private fun ErrorBanner(message: String) {
 }
 
 @Composable
-private fun LoadingBar(label: String?) {
+private fun LoadingBar(fraction: Float, label: String?) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        LinearProgressIndicator(Modifier.fillMaxWidth())
+        LinearProgressIndicator(progress = { fraction }, Modifier.fillMaxWidth())
         label?.let {
             Text(it, style = MaterialTheme.typography.bodySmall, color = MinecraftColors.TextSecondary)
         }
@@ -256,7 +269,12 @@ private fun LoadingBar(label: String?) {
 }
 
 @Composable
-private fun ResultsTable(state: UiState, onSelectRow: (Int) -> Unit) {
+private fun ResultsTable(
+    state: UiState,
+    onSelectRow: (Int) -> Unit,
+    onCopyTp: (Int) -> Unit,
+) {
+    val rows = remember(state.results) { state.results.map { it.toRow() } }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MinecraftColors.SurfaceDark),
@@ -281,7 +299,7 @@ private fun ResultsTable(state: UiState, onSelectRow: (Int) -> Unit) {
                 }
             }
 
-            if (state.results.isEmpty() && !state.isLoading) {
+            if (rows.isEmpty() && !state.isLoading) {
                 Text(
                     "No results yet — pick a world and run a scan.",
                     style = MaterialTheme.typography.bodySmall,
@@ -295,11 +313,12 @@ private fun ResultsTable(state: UiState, onSelectRow: (Int) -> Unit) {
             HorizontalDivider(color = MaterialTheme.colorScheme.outline)
 
             LazyColumn(Modifier.fillMaxWidth().height(320.dp)) {
-                itemsIndexed(state.results) { index, row ->
+                itemsIndexed(rows) { index, row ->
                     ResultRowView(
                         row = row,
                         selected = state.selectedIndex == index,
                         onClick = { onSelectRow(index) },
+                        onCopyTp = { onCopyTp(index) },
                     )
                 }
             }
@@ -325,7 +344,12 @@ private fun TableHeaderRow() {
 }
 
 @Composable
-private fun ResultRowView(row: ResultRow, selected: Boolean, onClick: () -> Unit) {
+private fun ResultRowView(
+    row: ResultRow,
+    selected: Boolean,
+    onClick: () -> Unit,
+    onCopyTp: () -> Unit,
+) {
     val background = if (selected) MinecraftColors.SurfaceVariant else Color.Transparent
     Row(
         modifier = Modifier
@@ -356,14 +380,14 @@ private fun ResultRowView(row: ResultRow, selected: Boolean, onClick: () -> Unit
         Text(row.item, Modifier.weight(ColumnWeights[5]), style = MaterialTheme.typography.bodySmall)
         IconButton(
             onClick = {
-                copyToClipboard(row.coords)
+                onCopyTp()
                 onClick()
             },
             modifier = Modifier.weight(ColumnWeights[6]),
         ) {
             Icon(
                 Icons.Default.ContentCopy,
-                contentDescription = "Copy coordinates",
+                contentDescription = "Copy /tp command",
                 tint = MinecraftColors.GrassGreen,
             )
         }

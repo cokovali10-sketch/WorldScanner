@@ -32,6 +32,10 @@ data class FoundItem(
 
 /**
  * A user-facing search result combining a found item with its world location.
+ *
+ * @param containerContents every item found in the immediate container (e.g.
+ *        the whole chest inventory), including nested container contents. Empty
+ *        for top-level matches on world entities without an inventory.
  */
 data class SearchResult(
     val item: ItemStack,
@@ -41,6 +45,7 @@ data class SearchResult(
     val chunkX: Int,
     val chunkZ: Int,
     val foundItem: FoundItem,
+    val containerContents: List<ItemStack> = emptyList(),
 ) {
     val source: ItemSource get() = foundItem.source
     val containerPath: List<String> get() = foundItem.containerPath

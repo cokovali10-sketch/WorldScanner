@@ -73,13 +73,18 @@ class ChunkScanner(val query: ScanQuery) {
         chunkZ: Int,
         sink: ResultSink,
     ): Boolean {
+        // Lazy full-inventory snapshot of this container; computed only when a
+        // match is actually found so non-matching holders pay no extra cost.
+        var cachedContents: List<ItemStack>? = null
+        val contents = { cachedContents ?: ItemStackExtractor.extractAll(holder).also { cachedContents = it } }
+
         for (stack in ItemStackExtractor.extractDirect(holder)) {
             if (matchesTarget(stack)) {
-                if (!emit(stack, emptyList(), source, dimension, regionX, regionZ, chunkX, chunkZ, sink)) {
+                if (!emit(stack, emptyList(), contents, source, dimension, regionX, regionZ, chunkX, chunkZ, sink)) {
                     return false
                 }
             }
-            if (query.includeNested && !walkNested(stack, emptyList(), 1, source, dimension, regionX, regionZ, chunkX, chunkZ, sink)) {
+            if (query.includeNested && !walkNested(stack, emptyList(), 1, contents, source, dimension, regionX, regionZ, chunkX, chunkZ, sink)) {
                 return false
             }
         }
@@ -90,6 +95,7 @@ class ChunkScanner(val query: ScanQuery) {
         stack: ItemStack,
         containerPath: List<String>,
         depth: Int,
+        containerContents: () -> List<ItemStack>,
         source: ItemSource,
         dimension: DimensionType,
         regionX: Int,
@@ -105,10 +111,10 @@ class ChunkScanner(val query: ScanQuery) {
             if (!continueScanning) return@extractNested
             val nestedPath = containerPath + stack.normalizedId
             if (matchesTarget(nested)) {
-                continueScanning = emit(nested, nestedPath, source, dimension, regionX, regionZ, chunkX, chunkZ, sink)
+                continueScanning = emit(nested, nestedPath, containerContents, source, dimension, regionX, regionZ, chunkX, chunkZ, sink)
             }
             if (continueScanning) {
-                continueScanning = walkNested(nested, nestedPath, depth + 1, source, dimension, regionX, regionZ, chunkX, chunkZ, sink)
+                continueScanning = walkNested(nested, nestedPath, depth + 1, containerContents, source, dimension, regionX, regionZ, chunkX, chunkZ, sink)
             }
         }
         return continueScanning
@@ -117,6 +123,7 @@ class ChunkScanner(val query: ScanQuery) {
     private fun emit(
         stack: ItemStack,
         containerPath: List<String>,
+        containerContents: () -> List<ItemStack>,
         source: ItemSource,
         dimension: DimensionType,
         regionX: Int,
@@ -126,7 +133,7 @@ class ChunkScanner(val query: ScanQuery) {
         sink: ResultSink,
     ): Boolean {
         val found = FoundItem(stack, containerPath, source)
-        return sink.offer(SearchResult(stack, dimension, regionX, regionZ, chunkX, chunkZ, found))
+        return sink.offer(SearchResult(stack, dimension, regionX, regionZ, chunkX, chunkZ, found, containerContents()))
     }
 
     private fun matchesTarget(stack: ItemStack): Boolean {

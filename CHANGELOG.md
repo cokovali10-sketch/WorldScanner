@@ -20,6 +20,37 @@ All notable changes to this project are documented in this file.
   with a copy-coordinates action
 - `gui.bat` launcher (and `run.bat gui` alias) for starting the GUI on Windows
 
+## [3.0.0] - 2026-08-01
+
+### Added
+- **Coroutine / Flow rewrite** of the scanning core in `core`:
+  - `SearchEngine.findFlow(...)` streams every match as a live `Flow<SearchResult>`
+  - `scan` / `analyze` are now `suspend`; all parallel work runs on
+    `Dispatchers.Default` with an `async` worker cap (one open region file per worker)
+  - `RegionScanner.scanUnit(unit): Flow<SearchResult>` per work-unit streaming with
+    thread-local decompression/NBT buffers
+- **Live progress metrics** via `ScanProgressSnapshot` (chunks/files done + total,
+  chunks-per-second and files-per-second over a 5 s sliding window, ETA in millis,
+  `percent` / `fraction` / `isComplete`); throttled to one report per second
+- **Container inspector data**: every `SearchResult` now carries
+  `containerContents` — the full decoded inventory of the immediate container,
+  including nested container contents (shulker boxes, bundles)
+- **GUI updates**:
+  - Results stream in live while scanning; progress bar shows chunks/s, regions/s and ETA
+  - Row click opens a **container inspector dialog** listing every item in the holder
+  - `/tp` copy action produces a dimension-aware `execute in ... run tp` command
+  - CSV / JSON **export panel** writes the current result set
+- New `org.worldscanner.core.export` package (`JsonExporter`, `CsvExporter`,
+  `NbtJson`) shared by the CLI and the GUI
+
+### Changed
+- `ScanProgress` callback signature replaced by `ScanProgressSnapshot`
+- CLI `find` / `stats` run through `runBlocking` on the suspend core API
+- Version bumped to `3.0.0` (root Gradle, GUI package version, CLI fallback)
+
+### Removed
+- Old thread-pool `Worker` / `ChunkVisitor` pipeline
+
 ## [2.0.0] - 2026-08-01
 
 ### Added

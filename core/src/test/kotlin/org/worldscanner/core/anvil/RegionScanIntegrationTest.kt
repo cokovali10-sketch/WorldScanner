@@ -3,6 +3,7 @@ package org.worldscanner.core.anvil
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import org.worldscanner.core.model.DimensionType
+import org.worldscanner.core.model.SearchResult
 import org.worldscanner.core.nbt.NbtCompound
 import org.worldscanner.core.nbt.NbtDouble
 import org.worldscanner.core.nbt.NbtInt
@@ -11,6 +12,8 @@ import org.worldscanner.core.nbt.NbtString
 import org.worldscanner.core.nbt.NbtType
 import org.worldscanner.core.nbt.NbtWriter
 import org.worldscanner.core.nbt.compoundOf
+import org.worldscanner.core.scan.ScanProgress
+import org.worldscanner.core.scan.ScanProgressSnapshot
 import org.worldscanner.core.scan.ScanQuery
 import org.worldscanner.core.scan.WorldScanner
 import java.io.ByteArrayOutputStream
@@ -20,6 +23,7 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.util.zip.Deflater
 import java.util.zip.GZIPOutputStream
+import kotlinx.coroutines.runBlocking
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -81,7 +85,7 @@ class RegionScanIntegrationTest {
         writeRegionFile(regionDir.resolve("r.0.0.mca"), NbtWriter.write(chunkNbt()), 2)
 
         WorldScanner(parallelism = 2).use { scanner ->
-            val report = scanner.scan(world, ScanQuery(itemTargets = setOf("netherite_ingot")))
+            val report = runBlocking { scanner.scan(world, ScanQuery(itemTargets = setOf("netherite_ingot"))) }
 
             assertEquals(1, report.results.size)
             val result = report.results[0]
@@ -103,7 +107,7 @@ class RegionScanIntegrationTest {
         writeRegionFile(regionDir.resolve("r.0.0.mca"), NbtWriter.write(chunkNbt()), 1)
 
         WorldScanner(parallelism = 2).use { scanner ->
-            val report = scanner.scan(world, ScanQuery(itemTargets = setOf("netherite_ingot")))
+            val report = runBlocking { scanner.scan(world, ScanQuery(itemTargets = setOf("netherite_ingot"))) }
             assertEquals(1, report.results.size)
         }
     }
@@ -127,7 +131,7 @@ class RegionScanIntegrationTest {
     fun `empty world yields no results and no errors`() {
         val world = Files.createDirectories(tempDir.resolve("empty"))
         WorldScanner().use { scanner ->
-            val report = scanner.scan(world, ScanQuery(itemTargets = setOf("diamond")))
+            val report = runBlocking { scanner.scan(world, ScanQuery(itemTargets = setOf("diamond"))) }
             assertTrue(report.results.isEmpty())
             assertEquals(0, report.stats.regionsScanned.get())
         }
@@ -142,8 +146,8 @@ class RegionScanIntegrationTest {
         writeRegionFile(world.resolve("DIM-1/region/r.0.0.mca"), NbtWriter.write(chunkNbt()), 2)
 
         WorldScanner().use { scanner ->
-            val overworld = scanner.scan(world, ScanQuery(itemTargets = setOf("netherite_ingot"), dimension = DimensionType.OVERWORLD))
-            val nether = scanner.scan(world, ScanQuery(itemTargets = setOf("netherite_ingot"), dimension = DimensionType.NETHER))
+            val overworld = runBlocking { scanner.scan(world, ScanQuery(itemTargets = setOf("netherite_ingot"), dimension = DimensionType.OVERWORLD)) }
+            val nether = runBlocking { scanner.scan(world, ScanQuery(itemTargets = setOf("netherite_ingot"), dimension = DimensionType.NETHER)) }
 
             assertEquals(1, overworld.results.size)
             assertEquals(DimensionType.OVERWORLD, overworld.results[0].dimension)
@@ -163,14 +167,47 @@ class RegionScanIntegrationTest {
         writeRegionFile(world.resolve("DIM-1/region/r.0.0.mca"), NbtWriter.write(chunkNbt()), 2)
 
         WorldScanner().use { scanner ->
-            val overworld = scanner.analyze(world, dimension = DimensionType.OVERWORLD)
-            val nether = scanner.analyze(world, dimension = DimensionType.NETHER)
+            val overworld = runBlocking { scanner.analyze(world, dimension = DimensionType.OVERWORLD) }
+            val nether = runBlocking { scanner.analyze(world, dimension = DimensionType.NETHER) }
 
             assertEquals(1, overworld.regionsByDimension[DimensionType.OVERWORLD])
             assertEquals(1, overworld.chunksByDimension[DimensionType.OVERWORLD])
             assertTrue(overworld.chunksByDimension[DimensionType.NETHER] == null)
             assertEquals(1, nether.chunksByDimension[DimensionType.NETHER])
         }
+    }
+
+    @Test
+    fun `scanFlow streams results and reports progress metrics`() {
+        val world = Files.createDirectories(tempDir.resolve("world"))
+        val regionDir = Files.createDirectories(world.resolve("region"))
+        writeRegionFile(regionDir.resolve("r.0.0.mca"), NbtWriter.write(chunkNbt()), 2)
+        writeRegionFile(regionDir.resolve("r.0.1.mca"), NbtWriter.write(chunkNbt()), 2)
+
+        val progressSnapshots = mutableListOf<ScanProgressSnapshot>()
+        val streamed = mutableListOf<SearchResult>()
+
+        WorldScanner(parallelism = 2).use { scanner ->
+            runBlocking {
+                scanner.scanFlow(
+                    world,
+                    ScanQuery(itemTargets = setOf("netherite_ingot")),
+                    onProgress = ScanProgress { snapshot ->
+                        synchronized(progressSnapshots) { progressSnapshots += snapshot }
+                    },
+                ).collect { result ->
+                    streamed += result
+                }
+            }
+        }
+
+        assertEquals(2, streamed.size)
+        assertTrue(streamed.all { it.containerContents.isNotEmpty() })
+        assertTrue(progressSnapshots.isNotEmpty())
+        val last = progressSnapshots.last()
+        assertEquals(last.totalChunks, last.chunksDone)
+        assertTrue(last.filesDone >= 1)
+        assertTrue(last.isComplete)
     }
 
     private fun writeRegionFile(path: Path, chunkBytes: ByteArray, compressionType: Int) {

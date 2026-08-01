@@ -1,11 +1,14 @@
 package org.worldscanner.cli
 
 import org.worldscanner.core.SearchEngine
+import org.worldscanner.core.export.CsvExporter
+import org.worldscanner.core.export.JsonExporter
 import org.worldscanner.core.filter.ComponentItemMatcher
 import org.worldscanner.core.filter.ItemFilterParser
 import org.worldscanner.core.model.DimensionType
 import org.worldscanner.core.scan.ScanQuery
 import java.nio.file.Files
+import kotlinx.coroutines.runBlocking
 import kotlin.system.exitProcess
 
 fun main(args: Array<String>) {
@@ -31,7 +34,7 @@ fun main(args: Array<String>) {
 }
 
 private fun version(): String =
-    Ansi::class.java.`package`.implementationVersion ?: "2.0.0"
+    Ansi::class.java.`package`.implementationVersion ?: "3.0.0"
 
 private fun requireWorld(parsed: CliArgs): java.nio.file.Path {
     if (!Files.isDirectory(parsed.worldPath)) {
@@ -57,14 +60,16 @@ private fun runStats(parsed: CliArgs, progress: Boolean) {
     val world = requireWorld(parsed)
     val started = System.nanoTime()
     val bar = ProgressBar("Scanning")
-    val result = SearchEngine.analyze(
-        worldRoot = world,
-        parallelism = parsed.threads ?: 0,
-        onProgress = progressBar(bar, progress),
-        dimension = parseDimension(parsed.dimension),
-        regionX = parsed.regionX,
-        regionZ = parsed.regionZ,
-    )
+    val result = runBlocking {
+        SearchEngine.analyze(
+            worldRoot = world,
+            parallelism = parsed.threads ?: 0,
+            onProgress = progressBar(bar, progress),
+            dimension = parseDimension(parsed.dimension),
+            regionX = parsed.regionX,
+            regionZ = parsed.regionZ,
+        )
+    }
     bar.clear()
     val elapsedMs = (System.nanoTime() - started) / 1_000_000
 
@@ -135,12 +140,14 @@ private fun runFind(parsed: CliArgs, progress: Boolean) {
 
     val started = System.nanoTime()
     val bar = ProgressBar("Scanning")
-    val report = SearchEngine.find(
-        worldRoot = world,
-        query = query,
-        parallelism = parsed.threads ?: 0,
-        onProgress = progressBar(bar, progress),
-    )
+    val report = runBlocking {
+        SearchEngine.find(
+            worldRoot = world,
+            query = query,
+            parallelism = parsed.threads ?: 0,
+            onProgress = progressBar(bar, progress),
+        )
+    }
     bar.clear()
     val elapsedMs = (System.nanoTime() - started) / 1_000_000
 
@@ -193,9 +200,9 @@ private fun printErrors(stats: org.worldscanner.core.scan.ScanStats) {
 }
 
 private fun progressBar(bar: ProgressBar, enabled: Boolean): org.worldscanner.core.scan.ScanProgress {
-    if (!enabled) return org.worldscanner.core.scan.ScanProgress { _, _ -> }
-    return org.worldscanner.core.scan.ScanProgress { done, total ->
-        bar.draw(done, total)
+    if (!enabled) return org.worldscanner.core.scan.ScanProgress { }
+    return org.worldscanner.core.scan.ScanProgress { snapshot ->
+        bar.draw(snapshot.chunksDone, snapshot.totalChunks)
     }
 }
 
