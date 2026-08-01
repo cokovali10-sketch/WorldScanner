@@ -18,6 +18,7 @@ All notable changes to this project are documented in this file.
   (`ScanViewModel` + `StateFlow<UiState>`), folder picker, live SNBT filter
   validation, asynchronous scanning with per-chunk progress and a results table
   with a copy-coordinates action
+- `gui.bat` launcher (and `run.bat gui` alias) for starting the GUI on Windows
 
 ## [2.0.0] - 2026-08-01
 

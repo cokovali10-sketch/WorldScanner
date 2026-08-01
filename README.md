@@ -22,21 +22,96 @@ modules:
 - Supports the **modern item format 1.20.5+** (`components`, `container.Items`) and the **legacy format** (`tag`, `BlockEntityTag`)
 - Multi-threaded region scanning with shared positional reads and thread-local decompression buffers
 - Decompression of **gzip**, **zlib**, **LZ4** and raw chunks
-- `stats` command: item / block-entity / entity frequency, plus **world version detection** from chunk `DataVersion`
 - Filters by dimension and region, result limits, `--threads` parallelism
-- Progress bar and **ANSI colors** in the terminal
-- JSON and CSV export
-- `--version` prints the tool version
-- **Desktop GUI** (`ui` module): browse for a world folder, type an SNBT filter
-  with live validation, scan with a progress bar and copy coordinates from the
-  results table
+- **Item component filters** (`/give`-style SNBT): search by enchantments, damage, custom names, custom data and more
+- JSON and CSV export, `--version` flag
+- **Desktop GUI** with folder picker, live filter validation, progress bar and a results table
 
 ## Requirements
 
 - **JDK 21+**
 - Minecraft: Java Edition 1.18+ (older formats are read too)
 
-## Quick start (Windows)
+## Choosing an interface
+
+WorldScanner ships with two front-ends, both powered by the same `core` engine.
+Use whichever fits the task:
+
+| What you want to do                                 | Use |
+| --------------------------------------------------- | --- |
+| Find items by **clicking around** — pick a folder, type a filter, browse results, copy coordinates | **GUI** |
+| **Scripted / automated** searches, batch scans, JSON/CSV export | **CLI** |
+| Inspect a world or get **item statistics** (`stats` command) | **CLI** |
+| Full `find` control: dimension / region limits, result caps, threads | **CLI** |
+
+Both accept the **same filter syntax**, so a filter you write in one place works
+in the other.
+
+---
+
+## Desktop GUI
+
+The `ui` module is a Compose for Desktop app on top of the `core` engine. It
+runs scans asynchronously (per-chunk progress), validates the SNBT filter as you
+type, and shows results in a table from which coordinates can be copied straight
+to the clipboard.
+
+### Launching
+
+| Platform | Command |
+| -------- | ------- |
+| Windows  | `gui.bat` (or `run.bat gui`) |
+| Windows / macOS / Linux | `gradlew.bat :ui:run` / `./gradlew :ui:run` |
+
+> First launch downloads the Compose dependencies and takes a minute; later
+> launches are fast.
+
+### Step by step
+
+1. **World folder** — click **Browse…** (or type the path) and select the
+   Minecraft save directory. That is the folder that contains `level.dat`,
+   i.e. the world you choose in the game's "Singleplayer" list.
+   *(Example: `C:/Users/<you>/AppData/Roaming/.minecraft/saves/Survival`)*
+
+2. **Item filter** — type what you are looking for (see
+   [Filter syntax](#item-filter--component-matching) below), e.g.:
+   ```text
+   diamond_sword[enchantments={mending:1,sharpness:5}]
+   ```
+   The filter is **validated as you type**:
+   - red error text under the field → fix it (the message tells you where);
+   - no error → the filter is valid and the **Start scan** button lights up.
+
+3. **Start scan** — click **Start scan**. The button is only enabled when the
+   path exists *and* the filter is valid. A progress bar shows the chunk
+   progress; **Cancel** stops it.
+
+4. **Results** — matches appear in the table:
+
+   | Column | Meaning |
+   | ------ | ------- |
+   | Dimension | Overworld / Nether / End |
+   | Region | Region file coordinates (`r.<x>.<z>.mca`) |
+   | Coordinates | Block X, Y, Z |
+   | Chunk | Chunk X, Z |
+   | Container | Where the item sits (e.g. `chest → shulker_box`) |
+   | Item | Item id |
+
+   Click the **copy icon** on a row to put its coordinates on the clipboard —
+   paste them into Minecraft (e.g. `/tp <x> <y> <z>`) to teleport to the item.
+
+### Distribution / installer
+
+```bat
+gradlew.bat :ui:createDistributable     rem build an app bundle / installer
+gradlew.bat :ui:packageMsi              rem Windows-only MSI installer
+```
+
+---
+
+## Command line
+
+### Quick start (Windows)
 
 ```bat
 worldscanner.bat help
@@ -51,9 +126,9 @@ On macOS / Linux the same commands work via `./worldscanner`.
 
 > On the **first run** the launcher builds a standalone distribution automatically,
 > so subsequent runs are fast and do not need Gradle. `run.bat` is an alias for
-> `worldscanner.bat` for backward compatibility.
+> `worldscanner.bat` for backward compatibility, and `run.bat gui` opens the GUI.
 
-## Command reference
+### Command reference
 
 ```
 worldscanner info  <world-path>               Inspect a world
@@ -79,12 +154,16 @@ worldscanner help                             Show usage
 | `--summary`            | Compact output instead of a full table             |
 | `--color`/`--no-color` | Force ANSI colors on/off                           |
 
-### `--filter` / item component matching
+---
 
-`--filter` accepts Minecraft 1.20.5+ **item component** syntax (same style as the
-`/give` command) to search by more than just the item id. The filter is parsed
-with a full SNBT-style component parser and matches both the modern `components`
-branch and the legacy pre-1.20.5 `tag` branch, so it works across versions:
+## Item filter / component matching
+
+This is the **same filter syntax** used by the GUI field and the CLI
+`--filter` / `-f` flag. It accepts Minecraft 1.20.5+ **item component** syntax
+(like the `/give` command) to search by more than just the item id. The filter
+is parsed with a full SNBT-style component parser and matches both the modern
+`components` branch and the legacy pre-1.20.5 `tag` branch, so it works across
+versions:
 
 ```text
 diamond_sword[enchantments={mending:1,sharpness:5},damage=150]
@@ -107,7 +186,8 @@ worldscanner find C:/worlds/survival -f "netherite_sword[damage=50,custom_data={
 
 > On Windows, quote embedded quotes so the shell preserves them, e.g.
 > `-f "netherite_sword[custom_data={owner:\"koca\"}]"`, or write the filter to a
-> file and pass it via `--filter=<value>` from a script.
+> file and pass it via `--filter=<value>` from a script. In the GUI you can just
+> type the quotes directly.
 
 ## Minecraft version compatibility
 
@@ -122,27 +202,15 @@ structurally and never checks `DataVersion` to decide what to read. Supported:
 Run `worldscanner stats <world>` to see the world's chunk `DataVersion` range and
 confirm compatibility before a full scan.
 
-## Desktop GUI
-
-The `ui` module provides a Compose for Desktop application on top of the same
-`core` engine. It runs scans asynchronously (progress shown per chunk), validates
-the SNBT filter as you type, and renders results in a table with dimension,
-region, coordinates, chunk, container and item columns. Coordinates can be copied
-straight to the clipboard.
-
-```bat
-gradlew.bat :ui:run                              # run the GUI
-gradlew.bat :ui:createDistributable              # build an installer / app bundle
-```
-
 ## Building from source
 
 ```bat
 gradlew.bat build          # compile + run all tests
 gradlew.bat :core:test     # run only the core tests
+gradlew.bat :ui:run        # run the desktop GUI
 ```
 
-### Standalone distribution (no Gradle needed at runtime)
+### Standalone CLI distribution (no Gradle needed at runtime)
 
 ```bat
 gradlew.bat :cli:installDist
@@ -156,6 +224,7 @@ core/src/main/kotlin/org/worldscanner/core/
 ├── nbt/              NbtType, NbtTag (sealed), NbtReader, NbtWriter
 ├── anvil/            RegionFile (positional reads), ChunkCompression, RegionDiscovery
 ├── model/            ItemStack, BlockPos, SearchResult, ItemSource, DimensionType
+├── filter/           ItemFilter, ItemFilterParser, ItemMatcher, ComponentItemMatcher
 ├── scan/             ScanQuery, ChunkScanner, ChunkStructure, ItemStackExtractor,
 │                     WorldScanner (visitor + progress), WorldAnalysis (ChunkAnalyzer)
 └── SearchEngine.kt   facade API: find / analyze / describe

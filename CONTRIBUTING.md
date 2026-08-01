@@ -4,14 +4,16 @@ Thanks for taking the time to contribute to WorldScanner!
 
 ## Project layout
 
-- `core/` — library module (NBT, Anvil, model, scan, analysis)
+- `core/` — library module (NBT, Anvil, model, filter, scan, analysis)
 - `cli/` — console application built on top of `core`
+- `ui/` — Compose for Desktop GUI built on top of `core`
 
 ## Getting started
 
 ```bat
 gradlew.bat build          # compile + run all tests
 gradlew.bat :core:test     # core tests only
+gradlew.bat :ui:run        # run the desktop GUI for manual testing
 ```
 
 Requirements: JDK 21+.
@@ -31,7 +33,12 @@ Requirements: JDK 21+.
   behaviour on a hard-coded `DataVersion`.
 - When adding container paths, update `ItemStackExtractor` (and its tests) — it
   is the single place that knows where Minecraft stores inventories.
+- When changing the filter grammar, update `ItemFilterParser`, `ComponentItemMatcher`
+  and their tests, and keep the GUI's live validation and the CLI `--filter` in sync.
 - Keep the CLI output readable both with and without ANSI colors.
+- GUI behaviour (state, validation, scan lifecycle) lives in `ScanViewModel`
+  (`ui/src/main/kotlin/org/worldscanner/ui/ScanViewModel.kt`); `App.kt` is pure
+  layout. Keep business logic out of composables.
 
 ## Releasing
 

@@ -2,12 +2,18 @@
 setlocal
 cd /d "%~dp0"
 
+if /i "%~1"=="gui" (
+    call gui.bat
+    exit /b %errorlevel%
+)
+
 if "%~1"=="" (
     echo WorldScanner 2.0 - Minecraft Anvil world item scanner
     echo.
     echo Usage:  run.bat ^<command^> [args]
     echo.
     echo Commands:
+    echo   run.bat gui                             Open the desktop GUI
     echo   run.bat info  ^<world-path^>            Inspect a world
     echo   run.bat stats ^<world-path^>            Item / block-entity / entity statistics
     echo   run.bat find  ^<world-path^> --item ^<id^> [options]
